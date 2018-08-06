@@ -1,4 +1,4 @@
-load("LC.sage")
+load("Github/vertex-minors/LC.sage")
 class SimpleGraph(Graph):
     def __init__(self,*args,**kwargs):
         """Can be initialized in the same way as Graph(). An additional option is to give a list, which by default will give a complete graph on the vertices provided in the list, if format='empty' is given the graph is instead a graph on the vertices in the list with no edges."""
