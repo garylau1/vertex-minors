@@ -90,7 +90,7 @@ class SimpleGraphLMQC(SimpleGraph):
         return True,self.from_Qi_to_Q((A,B,C,D))
 
     def powerset(iterable,max_length=None):
-        "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+        "powerset([1,2,3]) -->  (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
         s = list(iterable)
         if max_length==None:
             max_length=len(s)
@@ -101,7 +101,6 @@ class SimpleGraphLMQC(SimpleGraph):
         self.calc_Q_local()
 
         if len(self.nonzero_positions) == 4*self.order():
-            #This is the single qubit operation case
             return self.is_LC_eq(other)
 
         n=self.order()
@@ -121,9 +120,3 @@ class SimpleGraphLMQC(SimpleGraph):
                 return bool_result,Q_result
 
         return False,[]
-
-        # combinations_to_check = powerset(range(sizeX),nlist,basisXasMatrix,len(V.basis()))
-        # full_gen = (check_combination_for_q_constraint(z[0],z[1],G,H) for z in combinations_to_check)
-        # sol_space = [i[1:3] for i in full_gen if i[0]]
-        # sol_set = [i[0] for i in sol_space]
-        # sol_dist = [i[1] for i in sol_space]
