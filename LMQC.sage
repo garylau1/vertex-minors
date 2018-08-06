@@ -1,5 +1,5 @@
-load("Github/vertex-minors/LC.sage")
-load("Github/vertex-minors/GraphClasses.sage")
+
+load("GraphClasses.sage")
 import itertools
 import numpy as np
 from scipy.linalg import block_diag
@@ -7,7 +7,6 @@ from scipy.linalg import block_diag
 class SimpleGraphLMQC(SimpleGraph):
     def __init__(self,*args,**kwargs):
         """Can be initialized in the same way as Graph(). An additional option is to give a list, which by default will give a complete graph on the vertices provided in the list, if format='empty' is given the graph is instead a graph on the vertices in the list with no edges."""
-
         try:
             super(SimpleGraph,self).__init__(*args,**kwargs)
             try:
@@ -48,20 +47,22 @@ class SimpleGraphLMQC(SimpleGraph):
                                 +[i+2*self.order()**2 for i in nonzero_pos_A]
                                 +[i+3*self.order()**2 for i in nonzero_pos_A]][0]
 
-    def from_Qi_to_Q(self,Q_i):
+    def from_Qi_to_Q(self):
+        """Form Q from Qi, where Q_i is a list of matrices which are placed on the diagonal of Q"""
         Q = []
-        for A in Q_i:
+        for A in self.Q_i:
             M = A[0]
             for m in A[1:]:
                 M = block_diag(M,m)
             Q.append(matrix(M))
-        return tuple(Q)
+        self.Q_i = tuple(Q)
 
     def check_symp_constraint(self,vec_list,test=False):
+        """from list of basis vectors, form Q_i's and check symplectic constraint. Return Q if symplectic"""
         Q_vec = np.sum(vec_list,axis=0).tolist()
         node_list = [len(i) for i in self.partition]
         A = [];B = [];C = [];D = []
-        z = len(Q_vec)/4
+        z = self.order()
         i=0
         M = [MatrixSpace(GF(2),j,j) for j in range(1,1+max(node_list))]
         for size_node in node_list:
@@ -87,7 +88,9 @@ class SimpleGraphLMQC(SimpleGraph):
                 pass
             else:
                 return False,[]
-        return True,self.from_Qi_to_Q((A,B,C,D))
+            self.Q_i = (A,B,C,D)
+            self.from_Qi_to_Q()
+        return True,self.Q_i
 
     def powerset(iterable,max_length=None):
         "powerset([1,2,3]) -->  (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -97,7 +100,7 @@ class SimpleGraphLMQC(SimpleGraph):
         return chain.from_iterable(itertools.combinations(s, r) for r in range(1,max_length+1))
 
     def is_LMQC_equiv(self,other):
-
+        """Checks whether self and other are LMQC equivalent."""
         self.calc_Q_local()
 
         if len(self.nonzero_positions) == 4*self.order():

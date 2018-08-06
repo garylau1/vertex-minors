@@ -1,4 +1,4 @@
-load("Github/vertex-minors/LC.sage")
+load("LC.sage")
 class SimpleGraph(Graph):
     def __init__(self,*args,**kwargs):
         """Can be initialized in the same way as Graph(). An additional option is to give a list, which by default will give a complete graph on the vertices provided in the list, if format='empty' is given the graph is instead a graph on the vertices in the list with no edges."""
@@ -219,7 +219,7 @@ class SimpleGraph(Graph):
             'DH': An efficient method for instances where self is distance-hereditary and other is a star graph. If check_DH is set to True then it will be checked whether self is actually distance-hereditary. If other is not a star graph an ValueError is raised.
                 Output: Returns a sequence of vertices 'm' such that the corresponding sequence of local complementations gives a graph which induced subgraph on V(other) is a star graph. If no such sequence exists, None is returned.
         """
-        
+
         if method=='brute':
             (ans,bases)=self.can_meas(other)
             if not ans:
