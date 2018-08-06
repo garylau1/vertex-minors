@@ -1,6 +1,5 @@
 
 load("GraphClasses.sage")
-load("Github/vertex-minors/GraphClasses.sage")
 import itertools
 import numpy as np
 from scipy.linalg import block_diag
@@ -93,7 +92,9 @@ class SimpleGraphLMQC(SimpleGraph):
             self.from_Qi_to_Q()
         return True,self.Q_i
 
+    def powerset(self,max_length=None):
         "powerset([1,2,3]) -->  (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+        s = list(self.iterable)
         if max_length==None:
             max_length=len(s)
         return chain.from_iterable(itertools.combinations(s, r) for r in range(1,max_length+1))
@@ -117,6 +118,8 @@ class SimpleGraphLMQC(SimpleGraph):
         V = M.kernel()
         V_basis_array = np.asarray(V.basis())
 
+        self.iterable = range(len(V.basis()))
+        for combi in self.powerset():
             bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
             if bool_result:
                 return bool_result,Q_result
