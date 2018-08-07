@@ -125,3 +125,32 @@ class SimpleGraphLMQC(SimpleGraph):
                 return bool_result,Q_result
 
         return False,[]
+
+    def has_GHZ(self,method="poly"):
+
+        if max([len(i) for i in self.partition])>2 or method == "brute-force":
+            return self.is_LMQC_equiv(graphs.CompleteGraph(self.order()))
+
+        if method == "poly":
+            #Check if it is equiv to star graph
+            all_edges = set([i for i in itertools.combinations(range(self.order()),2)])
+            for v in self.vertices():
+                all_edges_v = set([(i,j) for i,j in all_edges if i==v or j==v])
+                self.edge_set_v = set([i[:2] for i in self.edges_incident(v)])
+                self.equiv = True
+                for e in all_edges_v.symmetric_difference(self.edge_set_v):
+                    if list(e) not in self.partition:
+                        self.equiv=False
+                        break
+                if self.equiv:
+                    return True
+
+            #Check if it is equiv to complete graph
+            all_edges = set([i for i in itertools.combinations(range(self.order()),2)])
+            self.edge_set = set([i[:2] for i in self.edges()])
+            for e in all_edges.symmetric_difference(self.edge_set):
+                if list(e) not in self.partition:
+                    return False
+                else:
+                    pass
+            return True
