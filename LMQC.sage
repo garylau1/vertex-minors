@@ -8,8 +8,10 @@ class SimpleGraphLMQC(SimpleGraph):
     def __init__(self,*args,**kwargs):
         """Can be initialized in the same way as SimpleGraph(). In addition, it is possible to specify a partition of the vertex set."""
         super(SimpleGraphLMQC,self).__init__(*args,**kwargs)
+        # self.partition = kwargs.get('partition')
 
-        self.partition = kwargs.get('partition')
+    def set_partition(self,partition):
+        self.partition = partition
 
     def calc_Q_local(self):
         """Uses the partition of the vertex set to calculate which entries of Q_local are possibly non-zero. Returns list of columns."""
@@ -19,7 +21,7 @@ class SimpleGraphLMQC(SimpleGraph):
         for i in self.partition:
             for x,y in list(itertools.product(i, i)):
                 nonzero_pos_A.append(y+x*self.order())
-        #Now we shit the positions for A to the positions for B,C,D. They are resp. 1,2 or 3 self.order()**2 further in the list.
+        #Now we shift the positions for A to the positions for B,C,D. They are {1,2,3}*self.order()**2 further in the list respectively.
         self.nonzero_positions = [
                                      [i+0*self.order()**2 for i in nonzero_pos_A]
                                     +[i+1*self.order()**2 for i in nonzero_pos_A]
@@ -104,6 +106,8 @@ class SimpleGraphLMQC(SimpleGraph):
 
         self.calc_Q_local()
         iden = matrix.identity(self.order())
+
+        #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
         M = np.concatenate((
                         np.kron(iden,other.adjacency_matrix()),
                         np.kron(self.adjacency_matrix(),other.adjacency_matrix()),
@@ -111,51 +115,20 @@ class SimpleGraphLMQC(SimpleGraph):
                         np.kron(self.adjacency_matrix(),iden)
                             ), axis=0)
 
+        #We can disregard part of this matrix as they correspond to neccessary zero elements of the solution vector.
         M = Matrix(GF(2),M[self.nonzero_positions])
+        #and we solve for the vector (A,B,C,D).
         V = M.kernel()
         V_basis_array = np.asarray(V.basis())
 
+        #Now we check every vector in the linear solution space to see if it satisfies the symplectic constraint
         self.iterable = range(len(V.basis()))
         for combi in self.powerset():
             bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
             if bool_result:
                 return bool_result,Q_result
 
-        return False,[]
-
-    def stab_is_LMQC_eq(self,stab):
-        """Decide whether self and other are LMQC equivalent. Note that we go from the stabililer to the graph state."""
-        assert type(stab) in (tuple,list)
-        self.stab_x,self.stab_z = stab
-        if self.partition is None:
-            print "No partition given, assuming every node has one qubit"
-            self.partition = [[i] for i in range(self.order())]
-        else:
-            assert type(self.partition) is list, "Partition should be a list (of lists)"
-            for node in self.partition:
-                assert type(node) is list, "Partition should be a list of lists"
-        #
-        self.calc_Q_local()
-
-        iden = matrix.identity(self.order())
-        M = np.concatenate((
-                        np.kron(self.stab_x,self.adjacency_matrix()),
-                        np.kron(self.stab_z,self.adjacency_matrix()),
-                        np.kron(self.stab_x,iden),
-                        np.kron(self.stab_z,iden)
-                            ), axis=0)
-
-        M = Matrix(GF(2),M[self.nonzero_positions])
-        V = M.kernel()
-        V_basis_array = np.asarray(V.basis())
-
-        self.iterable = range(len(V.basis()))
-
-        for combi in self.powerset():
-            bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
-            if bool_result:
-                return bool_result,Q_result
-
+        #If none of the vectors satisfy the symplectic constraint, return False
         return False,[]
 
     def run_tests(self):
@@ -165,11 +138,6 @@ class SimpleGraphLMQC(SimpleGraph):
         H = SimpleGraphLMQC(Graph({0:[1,3],2:[3]}))
         dum, _ = G.is_LMQC_eq(H)
         if dum: print "Succesful tested with two LMQC equivalent graphs"
-        else: print "Something went wrong"
-
-        stab = (matrix.identity(4),H.adjacency_matrix())
-        dum, _ = G.stab_is_LMQC_eq(stab)
-        if dum: print "Succesful tested LMQC equivalence of a graph and a stabilizer"
         else: print "Something went wrong"
 
         G = SimpleGraphLMQC(Graph({0:[1,2,3]}),**{'partition':[[0,1],[2],[3]]})
