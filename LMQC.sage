@@ -95,14 +95,14 @@ class SimpleGraphLMQC(SimpleGraph):
 
         if self.partition is None:
             print "No partition given, assuming every node has one qubit"
-            return self.is_LC_eq(self.other)
+            return self.is_LC_eq(self.other,allow_disc=True),[]
 
         assert type(self.partition) is list, "Partition should be a list (of lists)"
         for node in self.partition:
             assert type(node) is list, "Partition should be a list of lists"
 
         if len(self.partition) == self.order():
-            return self.is_LC_eq(self.other)
+            return self.is_LC_eq(self.other,allow_disc=True),[]
 
         self.calc_Q_local()
         iden = matrix.identity(self.order())
@@ -130,6 +130,86 @@ class SimpleGraphLMQC(SimpleGraph):
 
         #If none of the vectors satisfy the symplectic constraint, return False
         return False,[]
+
+    @staticmethod
+    def generateTwoEquivRandomGraphs(V):
+        #Generate node list
+        nlist =[]
+        two_qubit_oper_list = []
+        two_qubit_qubits = []
+        i = 0
+        while i < V:
+            coin = randint(0,3)
+            if coin != 1:
+                nlist.append([i])
+                i+=1
+            else:
+                nlist.append([i,i+1])
+                two_qubit_oper_list.append([i,i+1])
+                two_qubit_qubits.extend([i,i+1])
+                i+=2
+            if i == V-1:
+                nlist.append([i])
+                i+=1
+
+        #Start with a random tree
+        G = SimpleGraph(graphs.RandomTree(V))
+
+        #Randomly choose a number of edges of the graph, we will add those later
+        max_number_edges = choice(range(V-1,V*(V-1)))
+
+        #Initialize the complement of G for later use.
+        Gc = G.complement()
+
+        #While G has less number of edges than the allowed maximum number of edges,
+        #add a random new edge from the edges not yet in G (so they are in Gc)
+        while G.size()<max_number_edges and Gc.size()>0:
+            i,j,_ = Gc.random_edge()
+            G.add_edge(i,j)
+            Gc.delete_edge(i,j)
+
+        #Now we have G, we want a local equivalant graph H
+        H = copy(G)
+
+        #We make a list of all possible operations, the first part is a list of
+        #all possible vertices to do local complementations,
+        #the second part is a list of all possible nodes with multiple qubits
+        #to do multiqubit operations.
+
+        #We value local complementations a bit more than edge swaps.
+        all_operations = 3*[(0,v) for v in range(V)]+[(1,l) for l in two_qubit_oper_list]
+
+        U = []
+        #We do random number of random operations on the graph
+        for _ in range(randint(V,V^2)):
+            #oper is a tuple where the first element is 0 or 1 and the second element
+            #is a vertice or a pair, depending on the first.
+            oper = choice(all_operations)
+
+            if oper[0]:
+                H.flip_edge(oper[1])
+                U.append(("CZ",oper[1]))
+            else:
+                U.append(("LC",oper[1]))
+                for i in two_qubit_qubits:
+                    if i in H.neighbors(oper[1]):
+                        U.append(("LC_N",i))
+                H.tau(oper[1],inplace=True)
+        return G,H,nlist,U
+
+    @staticmethod
+    def find_F_list():
+        V = 4
+        H = SimpleGraphLMQC({0:[3],1:[2]})
+        F_list = []
+        for i in powerset(combinations(range(V),2)):
+            G = SimpleGraphLMQC(V)
+            G.set_partition([[0,1],[2],[3]])
+            G.add_edges(i)
+            if G.is_LMQC_eq(H)[0]:
+                G.relabel({0:"Aa",1:"Ab",2:"A1",3:"A0"})
+                F_list.append(G)
+        return F_list
 
     def run_tests(self):
         assert type(self) in (SimpleGraphLMQC,SimpleGraph,Graph)
