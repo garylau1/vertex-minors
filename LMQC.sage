@@ -211,6 +211,290 @@ class SimpleGraphLMQC(SimpleGraph):
                 F_list.append(G)
         return F_list
 
+    @staticmethod
+    def do_GT(G,F,a,b):
+        relabel = False
+        if not [i for i in G.neighbors(a) if i!=b]:
+            if [i for i in G.neighbors(b) if i!=a]:
+                a,b=b,a
+                relabel = True
+            else:
+                raise ValueError('a,b are disconnected from other parts of G')
+        FG = SimpleGraph(G.union(F))
+        FG.add_edges([(a,'A0'),(b,'A1')])
+        if G.has_edge(a,b) and F.has_edge('A0','A1'):
+            # print "This part is used"
+            FG.tau_seq([a,'A0',a],inplace=True)
+            #Are we allowed to pick a qubit in another multi-qubit node?
+            n_G_of_A1 = [i for i in FG.neighbors('A1') if i in list(set(range(G.order()))-set([a,b]))]
+            u = n_G_of_A1[0]
+            FG.tau_seq([u,'A1',u],inplace=True)
+            n_G_of_b = [i for i in FG.neighbors(b) if i in ['Aa','Ab']]
+            v = n_G_of_b[0]
+            FG.tau_seq([v,b,v],inplace=True)
+            if FG.has_edge('A0','A1'):
+                raise ValueError('Two Y measurements will not commute!')
+        else:
+            FG.tau_seq([a,'A0',a,b,'A1',b],inplace=True)
+        if relabel:
+            a,b=b,a
+        return FG
+
+    def is_LMQC_eq_GT(self,H,node_list,F_list = None,debug=False):
+        multi_qubit_nodes = [i for i in node_list if len(i)>1]
+        if self.is_LC_eq(H,allow_disc=True):
+            return True
+        eq = True
+        Gp_list = []
+        Gp_list.append(self)
+        if F_list == None:
+            F_list = find_F_list()
+        for a,b in multi_qubit_nodes:
+            meas = ([a,b,'A0','A1'],['Z','Z','Z','Z'])
+            tmp_list = []
+            for Gp in Gp_list:
+                if debug:
+                    print "Set of neighbors connected to a,b",set(Gp.neighbors(a)).union(Gp.neighbors(b)) - set([a,b])
+                if not set(Gp.neighbors(a)).union(Gp.neighbors(b)) - set([a,b]):
+                    #if a,b are disconnected from the other vertices in Gp
+                    Gp.flip_edge((a,b))
+                    tmp_list.append(Gp)
+                    if debug: print "Gp with flipped edge has been added"
+                    continue
+                else:
+                    if debug: print "Gp with flipped edge has not been added"
+                    pass
+
+                if debug:
+                    print "(a,b) in G and Gp",G.has_edge(a,b),Gp.has_edge(a,b)
+                for F in F_list:
+                    G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
+                    if F.has_edge('A0','A1') and Gp.has_edge(a,b):
+                        #Case (I,I)
+                        G_oper = copy(G_F)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case II for (0,1) in F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 2 (S,I)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A0',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SI for (0,1) in F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+
+                        #Case 3 (I,S)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A1',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case IS for (0,1) in F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 4 (S,S)
+                        G_oper = copy(G_F)
+                        G_oper.tau_seq(['A0','A1'],inplace=True)
+                        if debug:
+                            if G_oper.has_edge('A0','A1'):
+                                print "(A0,A1) are connected"
+                                print "Edges of F",F.edges()
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SS for (0,1) in F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                    elif F.has_edge('A0','A1') and not Gp.has_edge(a,b):
+                        #Case (I,I)
+                        G_oper = copy(G_F)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case II for (0,1) in F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 2 (S,I)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A0',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SI for (0,1) in F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+
+                        #Case 3 (I,S)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A1',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case IS for (0,1) in F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        # #Case 4 (I,HS)
+                        # G_oper = copy(G_F)
+                        # G_oper.tau_seq(['A0','A1'],inplace=True)
+                        # if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
+                        # G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        # G_oper.relabel({"Aa":a,"Ab":b})
+                        # tmp_list.append(G_oper)
+                        # if debug:
+                        #     print "Case IHS for (0,1) in F and (a,b) notin Gp"
+                        #     if G_oper.is_LC_eq(H,allow_disc=True):
+                        #         print F.edges()
+
+                        #Case 5 (S,S)
+                        G_oper = copy(G_F)
+                        if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
+                        if G_oper.has_edge('A0','A1'):
+                            #Hopefully this doesn't happen
+                            G_oper.tau('A1',inplace=True)
+                            u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
+                            G_oper.tau_seq(['A0',u,'A0'],inplace=True)
+                        else:
+                            G_oper.tau_seq(['A0','A1'],inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SS for (0,1) in F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+                    elif not F.has_edge('A0','A1') and Gp.has_edge(a,b):
+                        #Case (I,I)
+                        G_oper = copy(G_F)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case II for (0,1) notin F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 2 (S,I)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A0',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SI for (0,1) notin F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+
+                        #Case 3 (I,S)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A1',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case IS for (0,1) notin F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 4 (S,S)
+                        G_oper = copy(G_F)
+                        if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
+                        if G_oper.has_edge('A0','A1'):
+                            G_oper.tau('A1',inplace=True)
+                            u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
+                            G_oper.tau_seq(['A0',u,'A0'],inplace=True)
+                        else:
+                            G_oper.tau_seq([a,b],inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SS for (0,1) notin F and (a,b) in Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+                    elif not F.has_edge('A0','A1') and not Gp.has_edge(a,b):
+                        #Case (I,I)
+                        G_oper = copy(G_F)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case II for (0,1) notin F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case (S,I)
+                        # print F.edges()
+                        G_oper = copy(G_F)
+                        G_oper.tau('A0',inplace=True)
+                        # print G_oper.edges()
+                        #For S,S
+                        if debug: print "neighbors of A1 after tau0",[i for i in G_oper.neighbors('A1') if i not in [a,b,'A0','A1']]
+                        try:
+                            u = [i for i in G_oper.neighbors('A1') if i not in [a,b,'A0','A1']][0]
+                        except:
+                            pass
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SI for (0,1) notin F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case (I,S)
+                        G_oper = copy(G_F)
+                        G_oper.tau('A1',inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case IS for (0,1) notin F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+                        #Case 4 (S,S)
+                        G_oper = copy(G_F)
+                        #u from (S,I)
+                        if G_oper.has_edge('A0','A1'):
+                            G_oper.tau_seq(['A0','A1',u,'A1'],inplace=True)
+                        else:
+                            G_oper.tau_seq(['A0','A1'],inplace=True)
+                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                        G_oper.relabel({"Aa":a,"Ab":b})
+                        tmp_list.append(G_oper)
+                        if debug:
+                            print "Case SS for (0,1) notin F and (a,b) notin Gp"
+                            if G_oper.is_LC_eq(H,allow_disc=True):
+                                print F.edges()
+
+            Gp_list.extend(tmp_list)
+        eq = False
+        for G_op in Gp_list:
+            if G_op.is_LC_eq(H,allow_disc=True):
+                if debug: show(G_op,H)
+                eq = True
+        return eq
+
     def run_tests(self):
         assert type(self) in (SimpleGraphLMQC,SimpleGraph,Graph)
 
