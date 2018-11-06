@@ -3,6 +3,7 @@ load("GraphClasses.sage")
 import itertools
 import numpy as np
 from scipy.linalg import block_diag
+from itertools import combinations,product
 
 class SimpleGraphLMQC(SimpleGraph):
     def __init__(self,*args,**kwargs):
@@ -19,7 +20,7 @@ class SimpleGraphLMQC(SimpleGraph):
         #where every number corresponds to an element of list(Nonzero_pos_A). So (0,1) is the second element, and (1,0) is the self.order()+1 th element.
         nonzero_pos_A = []
         for i in self.partition:
-            for x,y in list(itertools.product(i, i)):
+            for x,y in list(product(i, i)):
                 nonzero_pos_A.append(y+x*self.order())
         #Now we shift the positions for A to the positions for B,C,D. They are {1,2,3}*self.order()**2 further in the list respectively.
         self.nonzero_positions = [
@@ -84,7 +85,7 @@ class SimpleGraphLMQC(SimpleGraph):
         "powerset([1,2,3]) -->  (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
         if max_length==None:
             max_length=len(self.iterable)
-        return chain.from_iterable(itertools.combinations(self.iterable, r) for r in range(1,max_length+1))
+        return chain.from_iterable(combinations(self.iterable, r) for r in range(1,max_length+1))
 
     def is_LMQC_eq(self,other):
         """Decide whether self and other are LMQC equivalent."""
@@ -248,7 +249,7 @@ class SimpleGraphLMQC(SimpleGraph):
         Gp_list = []
         Gp_list.append(self)
         if F_list == None:
-            F_list = find_F_list()
+            F_list = SimpleGraphLMQC.find_F_list()
         for a,b in multi_qubit_nodes:
             meas = ([a,b,'A0','A1'],['Z','Z','Z','Z'])
             tmp_list = []
@@ -269,6 +270,11 @@ class SimpleGraphLMQC(SimpleGraph):
                     print "(a,b) in G and Gp",G.has_edge(a,b),Gp.has_edge(a,b)
                 for F in F_list:
                     G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
+                    if not Gp.has_edge(a,b) and G_F.has_edge('A0','A1'):
+                        raise ValueError('One of the used lemmas is not satisfied')
+                    if Gp.has_edge(a,b) and not G_F.has_edge('A0','A1') and not F.has_edge('A0','A1'):
+                        raise ValueError('One of the used lemmas is not satisfied')
+
                     if F.has_edge('A0','A1') and Gp.has_edge(a,b):
                         #Case (I,I)
                         G_oper = copy(G_F)
@@ -290,7 +296,6 @@ class SimpleGraphLMQC(SimpleGraph):
                             print "Case SI for (0,1) in F and (a,b) in Gp"
                             if G_oper.is_LC_eq(H,allow_disc=True):
                                 print F.edges()
-
 
                         #Case 3 (I,S)
                         G_oper = copy(G_F)
@@ -340,7 +345,6 @@ class SimpleGraphLMQC(SimpleGraph):
                             if G_oper.is_LC_eq(H,allow_disc=True):
                                 print F.edges()
 
-
                         #Case 3 (I,S)
                         G_oper = copy(G_F)
                         G_oper.tau('A1',inplace=True)
@@ -352,28 +356,9 @@ class SimpleGraphLMQC(SimpleGraph):
                             if G_oper.is_LC_eq(H,allow_disc=True):
                                 print F.edges()
 
-                        # #Case 4 (I,HS)
-                        # G_oper = copy(G_F)
-                        # G_oper.tau_seq(['A0','A1'],inplace=True)
-                        # if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
-                        # G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        # G_oper.relabel({"Aa":a,"Ab":b})
-                        # tmp_list.append(G_oper)
-                        # if debug:
-                        #     print "Case IHS for (0,1) in F and (a,b) notin Gp"
-                        #     if G_oper.is_LC_eq(H,allow_disc=True):
-                        #         print F.edges()
-
-                        #Case 5 (S,S)
+                        #Case 4 (S,S)
                         G_oper = copy(G_F)
-                        if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
-                        if G_oper.has_edge('A0','A1'):
-                            #Hopefully this doesn't happen
-                            G_oper.tau('A1',inplace=True)
-                            u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
-                            G_oper.tau_seq(['A0',u,'A0'],inplace=True)
-                        else:
-                            G_oper.tau_seq(['A0','A1'],inplace=True)
+                        G_oper.tau_seq(['A0','A1'],inplace=True)
                         G_oper.meas_seq(meas[0],meas[1],inplace=True)
                         G_oper.relabel({"Aa":a,"Ab":b})
                         tmp_list.append(G_oper)
@@ -403,7 +388,6 @@ class SimpleGraphLMQC(SimpleGraph):
                             if G_oper.is_LC_eq(H,allow_disc=True):
                                 print F.edges()
 
-
                         #Case 3 (I,S)
                         G_oper = copy(G_F)
                         G_oper.tau('A1',inplace=True)
@@ -417,13 +401,9 @@ class SimpleGraphLMQC(SimpleGraph):
 
                         #Case 4 (S,S)
                         G_oper = copy(G_F)
-                        if debug: print "(A0,A1) are connected",G_oper.has_edge('A0','A1')
-                        if G_oper.has_edge('A0','A1'):
-                            G_oper.tau('A1',inplace=True)
-                            u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
-                            G_oper.tau_seq(['A0',u,'A0'],inplace=True)
-                        else:
-                            G_oper.tau_seq([a,b],inplace=True)
+                        G_oper.tau('A1',inplace=True)
+                        u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
+                        G_oper.tau_seq(['A0',u,'A0'],inplace=True)
                         G_oper.meas_seq(meas[0],meas[1],inplace=True)
                         G_oper.relabel({"Aa":a,"Ab":b})
                         tmp_list.append(G_oper)
@@ -443,16 +423,8 @@ class SimpleGraphLMQC(SimpleGraph):
                                 print F.edges()
 
                         #Case (S,I)
-                        # print F.edges()
                         G_oper = copy(G_F)
                         G_oper.tau('A0',inplace=True)
-                        # print G_oper.edges()
-                        #For S,S
-                        if debug: print "neighbors of A1 after tau0",[i for i in G_oper.neighbors('A1') if i not in [a,b,'A0','A1']]
-                        try:
-                            u = [i for i in G_oper.neighbors('A1') if i not in [a,b,'A0','A1']][0]
-                        except:
-                            pass
                         G_oper.meas_seq(meas[0],meas[1],inplace=True)
                         G_oper.relabel({"Aa":a,"Ab":b})
                         tmp_list.append(G_oper)
@@ -474,11 +446,7 @@ class SimpleGraphLMQC(SimpleGraph):
 
                         #Case 4 (S,S)
                         G_oper = copy(G_F)
-                        #u from (S,I)
-                        if G_oper.has_edge('A0','A1'):
-                            G_oper.tau_seq(['A0','A1',u,'A1'],inplace=True)
-                        else:
-                            G_oper.tau_seq(['A0','A1'],inplace=True)
+                        G_oper.tau_seq(['A0','A1'],inplace=True)
                         G_oper.meas_seq(meas[0],meas[1],inplace=True)
                         G_oper.relabel({"Aa":a,"Ab":b})
                         tmp_list.append(G_oper)
@@ -493,6 +461,7 @@ class SimpleGraphLMQC(SimpleGraph):
             if G_op.is_LC_eq(H,allow_disc=True):
                 if debug: show(G_op,H)
                 eq = True
+                break
         return eq
 
     def run_tests(self):
