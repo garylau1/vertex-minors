@@ -268,7 +268,12 @@ class SimpleGraphLMQC(SimpleGraph):
 
                 if debug:
                     print "(a,b) in G and Gp",G.has_edge(a,b),Gp.has_edge(a,b)
-                for F in F_list:
+                for i,F in enumerate(F_list):
+                    #This comes from the assumption that HSZ=HSZsqrt(-iZ)
+                    if i in [0, 1, 2, 4, 5, 6, 8, 10, 12, 16]:
+                        pass
+                    else:
+                        continue
                     G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
                     if not Gp.has_edge(a,b) and G_F.has_edge('A0','A1'):
                         raise ValueError('One of the used lemmas is not satisfied')
@@ -454,14 +459,16 @@ class SimpleGraphLMQC(SimpleGraph):
                             print "Case SS for (0,1) notin F and (a,b) notin Gp"
                             if G_oper.is_LC_eq(H,allow_disc=True):
                                 print F.edges()
+            Gp_list = tmp_list
+            tmp_list = []
 
-            Gp_list.extend(tmp_list)
         eq = False
         for G_op in Gp_list:
             if G_op.is_LC_eq(H,allow_disc=True):
                 if debug: show(G_op,H)
                 eq = True
                 break
+        # return result.val
         return eq
 
     def run_tests(self):
