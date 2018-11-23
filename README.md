@@ -12,7 +12,7 @@ To use the classes, start sage and load the script by writing `load("LMQC.sage")
 
 #### Some useful methods:
 
-* `SimpleGraph(data)`: Creates an instance of the class `SimpleGraph`. `data` can be a an instance of the `Graph`-class already in SAGE, a dictionary describing the neighbors of vertices, etc.
+* `SimpleGraphLMQC(data)`: Creates an instance of the class `SimpleGraphLMQC`. `data` can be a an instance of the `Graph`-class already in SAGE, a dictionary describing the neighbors of vertices, etc.
 * `G1.is_LC_eq(G2)`: Checks if the graph `G1` is LC-equvialent to `G2`, where both graphs are instances of `SimpleGraph`. The method used the algorithm descibed by Bouchet in https://link.springer.com/article/10.1007/BF01275668
 * `G.set_partition(T)`: Initializes the partition of `G` as `T`. This is needed for `G.is_LMQC_eq(Gp)`.
 * `G.is_LMQC_eq(Gp)`: Checks if `G` is local multi-qubit Clifford equivalent to `Gp` given a partition `T`.
