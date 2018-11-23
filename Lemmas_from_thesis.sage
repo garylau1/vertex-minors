@@ -1,4 +1,3 @@
-# load("GitHub/vertex-minors/LMQC.sage")
 load("LMQC.sage")
 #Finding all graphs T LMQC to Bell 2
 V = 4
