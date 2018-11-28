@@ -133,28 +133,33 @@ class SimpleGraphLMQC(SimpleGraph):
         return False,[]
 
     @staticmethod
-    def generateTwoEquivRandomGraphs(V):
+    def generateTwoEquivRandomGraphs(V,nlist = []):
         #Generate node list
-        nlist =[]
+        # nlist =[]
         two_qubit_oper_list = []
         two_qubit_qubits = []
         i = 0
-        while i < V:
-            coin = randint(0,3)
-            if coin != 1:
-                nlist.append([i])
-                i+=1
-            else:
-                nlist.append([i,i+1])
-                two_qubit_oper_list.append([i,i+1])
-                two_qubit_qubits.extend([i,i+1])
-                i+=2
-            if i == V-1:
-                nlist.append([i])
-                i+=1
+        if nlist == []:
+            while i < V:
+                coin = randint(0,3)
+                if coin != 1:
+                    nlist.append([i])
+                    i+=1
+                else:
+                    nlist.append([i,i+1])
+                    two_qubit_oper_list.append([i,i+1])
+                    two_qubit_qubits.extend([i,i+1])
+                    i+=2
+                if i == V-1:
+                    nlist.append([i])
+                    i+=1
+        else:
+            two_qubit_oper_list = [i for i in nlist if len(i)>1]
+            for i,j in two_qubit_oper_list:
+                two_qubit_qubits.extend([i,j])
 
         #Start with a random tree
-        G = SimpleGraph(graphs.RandomTree(V))
+        G = SimpleGraphLMQC(graphs.RandomTree(V))
 
         #Randomly choose a number of edges of the graph, we will add those later
         max_number_edges = choice(range(V-1,V*(V-1)))
@@ -241,8 +246,8 @@ class SimpleGraphLMQC(SimpleGraph):
             a,b=b,a
         return FG
 
-    def is_LMQC_eq_GT(self,H,node_list,F_list = None,debug=False):
-        multi_qubit_nodes = [i for i in node_list if len(i)>1]
+    def is_LMQC_eq_GT(self,H,F_list = None,debug=False):
+        multi_qubit_nodes = [i for i in self.partition if len(i)>1]
         if self.is_LC_eq(H,allow_disc=True):
             return True
         eq = True
