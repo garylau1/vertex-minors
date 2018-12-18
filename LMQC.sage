@@ -51,24 +51,18 @@ class SimpleGraphLMQC(SimpleGraph):
         for size_node in node_list:
             A_new = transpose( M[size_node-1](Q_vec[    i:    i+size_node**2]) )
             C_new = transpose( M[size_node-1](Q_vec[2*z+i:2*z+i+size_node**2]) )
-
             if not A_new.transpose()*C_new==C_new.transpose()*A_new:
                 return False,[]
-
             B_new = transpose( M[size_node-1](Q_vec[  z+i:  z+i+size_node**2]) )
             D_new = transpose( M[size_node-1](Q_vec[3*z+i:3*z+i+size_node**2]) )
-
             if not B_new.transpose()*D_new==D_new.transpose()*B_new:
                 return False,[]
-
             if not A_new.transpose()*D_new+C_new.transpose()*B_new == matrix.identity(size_node):
                 return False,[]
-
             A.append(A_new);B.append(B_new);C.append(C_new);D.append(D_new)
             i+=size_node**2
         self.Q_i = (A,B,C,D)
         self.from_Qi_to_Q()
-
         if debug:
             Gamma = self.adjacency_matrix()
             Gamman = self.other.adjacency_matrix()
@@ -78,7 +72,6 @@ class SimpleGraphLMQC(SimpleGraph):
             print "A^TC+C^TA = \n", A.transpose()*C+C.transpose()*A
             print "B^TD+D^TA = \n", B.transpose()*D+D.transpose()*B
             print "A^TD+C^TB = \n", A.transpose()*D + C.transpose()*B
-
         return True,self.Q_i
 
     def powerset(self,max_length=None):
@@ -87,37 +80,7 @@ class SimpleGraphLMQC(SimpleGraph):
             max_length=len(self.iterable)
         return chain.from_iterable(combinations(self.iterable, r) for r in range(1,max_length+1))
 
-    @staticmethod
-    def find_F_list():
-        V = 4
-        H = SimpleGraphLMQC({0:[3],1:[2]})
-        F_list = []
-        for i in powerset(combinations(range(V),2)):
-            G = SimpleGraphLMQC(V)
-            G.set_partition([[0,1],[2],[3]])
-            G.add_edges(i)
-            if G.is_LMQC_eq(H):
-                G.relabel({0:"Aa",1:"Ab",2:"A1",3:"A0"})
-                F_list.append(G)
-        return F_list
-
-    @staticmethod
-    def do_GT(G,F,a,b):
-        relabel = False
-        if not [i for i in G.neighbors(a) if i!=b]:
-            if [i for i in G.neighbors(b) if i!=a]:
-                a,b=b,a
-                relabel = True
-            else:
-                raise ValueError('a,b are disconnected from other parts of G')
-        FG = SimpleGraph(G.union(F))
-        FG.add_edges([(a,'A0'),(b,'A1')])
-        FG.tau_seq([a,'A0',a,b,'A1',b],inplace=True)
-        if relabel:
-            a,b=b,a
-        return FG
-
-    def is_LMQC_eq(self,other,method = 'brute',F_list = None):
+    def is_LMQC_eq(self,other,method = 'brute'):
         """Decide whether self and other are LMQC equivalent."""
         assert type(other) in (SimpleGraphLMQC,SimpleGraph,Graph)
         self.other=other
@@ -138,8 +101,11 @@ class SimpleGraphLMQC(SimpleGraph):
                 try: self.delete_edge(a,b)
                 except: pass
             Gp_list = [self]
-            if F_list == None:
-                F_list = SimpleGraphLMQC.find_F_list()
+            Gtmp = Graph()
+            Gtmp.add_vertices(['A0','A1','Aa','Ab'])
+            F_list = [copy(Gtmp) for _ in range(10)]
+            edges_list = [[('A0', 'Aa'), ('A1', 'Ab')],[('A0', 'Aa'), ('A1', 'Ab'), ('Aa', 'Ab')],[('A0', 'Aa'), ('A1', 'Aa'), ('A1', 'Ab')],[('A0', 'Ab' ), ('A1', 'Aa')],[('A0', 'Ab'), ('A1', 'Aa'), ('Aa', 'Ab')],[('A0', 'Aa' ), ('A0', 'Ab'), ('A1', 'Aa')],[('A0', 'Ab'), ('A1', 'Aa'), ('A1', 'Ab')],[('A0', 'Aa' ), ('A0', 'Ab'), ('A1', 'Ab')],[('A0', 'A1' ), ('A0', 'Aa'), ('A1', 'Ab')],[('A0', 'A1' ), ('A0', 'Ab'), ('A1', 'Aa')]]
+            for i in range(10): F_list[i].add_edges(edges_list[i])
             for a,b in multi_qubit_nodes:
                 tmp_list = []
                 meas = ([a,b,'A0','A1'],['Z','Z','Z','Z'])
@@ -149,13 +115,10 @@ class SimpleGraphLMQC(SimpleGraph):
                         Gp.flip_edge((a,b))
                         tmp_list.append(Gp)
                     else:
-                        for i,F in enumerate(F_list):
-                            #This comes from the assumption that HSZ=HSZsqrt(-iZ)
-                            if i in [0, 1, 2, 4, 5, 6, 8, 10, 12, 16]:
-                                pass
-                            else:
-                                continue
-                            G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
+                        for F in F_list:
+                            G_F = SimpleGraph(G.union(F))
+                            G_F.add_edges([(a,'A0'),(b,'A1')])
+                            G_F.tau_seq([a,'A0',a,b,'A1',b],inplace=True)
                             for corr_a,corr_b in [("I","I"),("S","I"),("I","S"),("S","S")]:
                                 G_oper = copy(G_F)
                                 if corr_a == "S":
@@ -169,7 +132,7 @@ class SimpleGraphLMQC(SimpleGraph):
                 tmp_list = []
             eq = False
             for G_op in Gp_list:
-                if G_op.is_LC_eq(H,allow_disc=True):
+                if G_op.is_LC_eq(self.other,allow_disc=True):
                     eq = True
                     break
             return eq
@@ -206,22 +169,6 @@ class SimpleGraphLMQC(SimpleGraph):
             #If none of the vectors satisfy the symplectic constraint, return False
             # return False,[]
             return False
-
-    @staticmethod
-    def random_connected_graph(V):
-        #Start with a random tree
-        G = SimpleGraphLMQC(graphs.RandomTree(V))
-        #Randomly choose a number of edges of the graph, we will add those later
-        max_number_edges = choice(range(V-1,V*(V-1)))
-        #Initialize the complement of G for later use.
-        Gc = G.complement()
-        #While G has less number of edges than the allowed maximum number of edges,
-        #add a random new edge from the edges not yet in G (so they are in Gc)
-        while G.size()<max_number_edges and Gc.size()>0:
-            i,j,_ = Gc.random_edge()
-            G.add_edge(i,j)
-            Gc.delete_edge(i,j)
-        return G
 
     def run_tests(self):
         assert type(self) in (SimpleGraphLMQC,SimpleGraph,Graph)
