@@ -87,122 +87,6 @@ class SimpleGraphLMQC(SimpleGraph):
             max_length=len(self.iterable)
         return chain.from_iterable(combinations(self.iterable, r) for r in range(1,max_length+1))
 
-    def is_LMQC_eq(self,other):
-        """Decide whether self and other are LMQC equivalent."""
-        assert type(other) in (SimpleGraphLMQC,SimpleGraph,Graph)
-        self.other=other
-
-        assert self.vertices()==self.other.vertices(), "The vertex set of self and other are not equal."
-
-        if self.partition is None:
-            print "No partition given, assuming every node has one qubit"
-            return self.is_LC_eq(self.other,allow_disc=True),[]
-
-        assert type(self.partition) is list, "Partition should be a list (of lists)"
-        for node in self.partition:
-            assert type(node) is list, "Partition should be a list of lists"
-
-        if len(self.partition) == self.order():
-            return self.is_LC_eq(self.other,allow_disc=True),[]
-
-        self.calc_Q_local()
-        iden = matrix.identity(self.order())
-
-        #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
-        M = np.concatenate((
-                        np.kron(iden,other.adjacency_matrix()),
-                        np.kron(self.adjacency_matrix(),other.adjacency_matrix()),
-                        np.kron(iden,iden),
-                        np.kron(self.adjacency_matrix(),iden)
-                            ), axis=0)
-
-        #We can disregard part of this matrix as they correspond to neccessary zero elements of the solution vector.
-        M = Matrix(GF(2),M[self.nonzero_positions])
-        #and we solve for the vector (A,B,C,D).
-        V = M.kernel()
-        V_basis_array = np.asarray(V.basis())
-
-        #Now we check every vector in the linear solution space to see if it satisfies the symplectic constraint
-        self.iterable = range(len(V.basis()))
-        for combi in self.powerset():
-            bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
-            if bool_result:
-                return bool_result,Q_result
-
-        #If none of the vectors satisfy the symplectic constraint, return False
-        return False,[]
-
-    @staticmethod
-    def generateTwoEquivRandomGraphs(V,nlist = []):
-        #Generate node list
-        # nlist =[]
-        two_qubit_oper_list = []
-        two_qubit_qubits = []
-        i = 0
-        if nlist == []:
-            while i < V:
-                coin = randint(0,3)
-                if coin != 1:
-                    nlist.append([i])
-                    i+=1
-                else:
-                    nlist.append([i,i+1])
-                    two_qubit_oper_list.append([i,i+1])
-                    two_qubit_qubits.extend([i,i+1])
-                    i+=2
-                if i == V-1:
-                    nlist.append([i])
-                    i+=1
-        else:
-            two_qubit_oper_list = [i for i in nlist if len(i)>1]
-            for i,j in two_qubit_oper_list:
-                two_qubit_qubits.extend([i,j])
-
-        #Start with a random tree
-        G = SimpleGraphLMQC(graphs.RandomTree(V))
-
-        #Randomly choose a number of edges of the graph, we will add those later
-        max_number_edges = choice(range(V-1,V*(V-1)))
-
-        #Initialize the complement of G for later use.
-        Gc = G.complement()
-
-        #While G has less number of edges than the allowed maximum number of edges,
-        #add a random new edge from the edges not yet in G (so they are in Gc)
-        while G.size()<max_number_edges and Gc.size()>0:
-            i,j,_ = Gc.random_edge()
-            G.add_edge(i,j)
-            Gc.delete_edge(i,j)
-
-        #Now we have G, we want a local equivalant graph H
-        H = copy(G)
-
-        #We make a list of all possible operations, the first part is a list of
-        #all possible vertices to do local complementations,
-        #the second part is a list of all possible nodes with multiple qubits
-        #to do multiqubit operations.
-
-        #We value local complementations a bit more than edge swaps.
-        all_operations = 3*[(0,v) for v in range(V)]+[(1,l) for l in two_qubit_oper_list]
-
-        U = []
-        #We do random number of random operations on the graph
-        for _ in range(randint(V,V^2)):
-            #oper is a tuple where the first element is 0 or 1 and the second element
-            #is a vertice or a pair, depending on the first.
-            oper = choice(all_operations)
-
-            if oper[0]:
-                H.flip_edge(oper[1])
-                U.append(("CZ",oper[1]))
-            else:
-                U.append(("LC",oper[1]))
-                for i in two_qubit_qubits:
-                    if i in H.neighbors(oper[1]):
-                        U.append(("LC_N",i))
-                H.tau(oper[1],inplace=True)
-        return G,H,nlist,U
-
     @staticmethod
     def find_F_list():
         V = 4
@@ -212,7 +96,7 @@ class SimpleGraphLMQC(SimpleGraph):
             G = SimpleGraphLMQC(V)
             G.set_partition([[0,1],[2],[3]])
             G.add_edges(i)
-            if G.is_LMQC_eq(H)[0]:
+            if G.is_LMQC_eq(H):
                 G.relabel({0:"Aa",1:"Ab",2:"A1",3:"A0"})
                 F_list.append(G)
         return F_list
@@ -228,265 +112,128 @@ class SimpleGraphLMQC(SimpleGraph):
                 raise ValueError('a,b are disconnected from other parts of G')
         FG = SimpleGraph(G.union(F))
         FG.add_edges([(a,'A0'),(b,'A1')])
-        if G.has_edge(a,b) and F.has_edge('A0','A1'):
-            # print "This part is used"
-            FG.tau_seq([a,'A0',a],inplace=True)
-            #Are we allowed to pick a qubit in another multi-qubit node?
-            n_G_of_A1 = [i for i in FG.neighbors('A1') if i in list(set(range(G.order()))-set([a,b]))]
-            u = n_G_of_A1[0]
-            FG.tau_seq([u,'A1',u],inplace=True)
-            n_G_of_b = [i for i in FG.neighbors(b) if i in ['Aa','Ab']]
-            v = n_G_of_b[0]
-            FG.tau_seq([v,b,v],inplace=True)
-            if FG.has_edge('A0','A1'):
-                raise ValueError('Two Y measurements will not commute!')
-        else:
-            FG.tau_seq([a,'A0',a,b,'A1',b],inplace=True)
+        FG.tau_seq([a,'A0',a,b,'A1',b],inplace=True)
         if relabel:
             a,b=b,a
         return FG
 
-    def is_LMQC_eq_GT(self,H,F_list = None,debug=False):
-        multi_qubit_nodes = [i for i in self.partition if len(i)>1]
-        if self.is_LC_eq(H,allow_disc=True):
+    def is_LMQC_eq(self,other,method = 'brute',F_list = None):
+        """Decide whether self and other are LMQC equivalent."""
+        assert type(other) in (SimpleGraphLMQC,SimpleGraph,Graph)
+        self.other=other
+        assert self.vertices()==self.other.vertices(), "The vertex set of self and other are not equal."
+        if self.partition is None:
+            print "No partition given, assuming every node has one qubit"
+            return self.is_LC_eq(self.other,allow_disc=True)
+        assert type(self.partition) is list, "Partition should be a list (of lists)"
+        for node in self.partition:
+            assert type(node) is list, "Partition should be a list of lists"
+        if self.is_LC_eq(self.other,allow_disc=True):
             return True
-        eq = True
-        Gp_list = []
-        Gp_list.append(self)
-        if F_list == None:
-            F_list = SimpleGraphLMQC.find_F_list()
-        for a,b in multi_qubit_nodes:
-            meas = ([a,b,'A0','A1'],['Z','Z','Z','Z'])
-            tmp_list = []
-            for Gp in Gp_list:
-                if debug:
-                    print "Set of neighbors connected to a,b",set(Gp.neighbors(a)).union(Gp.neighbors(b)) - set([a,b])
-                if not set(Gp.neighbors(a)).union(Gp.neighbors(b)) - set([a,b]):
-                    #if a,b are disconnected from the other vertices in Gp
-                    Gp.flip_edge((a,b))
-                    tmp_list.append(Gp)
-                    if debug: print "Gp with flipped edge has been added"
-                    continue
-                else:
-                    if debug: print "Gp with flipped edge has not been added"
-                    pass
-
-                if debug:
-                    print "(a,b) in G and Gp",G.has_edge(a,b),Gp.has_edge(a,b)
-                for i,F in enumerate(F_list):
-                    #This comes from the assumption that HSZ=HSZsqrt(-iZ)
-                    if i in [0, 1, 2, 4, 5, 6, 8, 10, 12, 16]:
-                        pass
+        if len(self.partition) == self.order():
+            return self.is_LC_eq(self.other,allow_disc=True)
+        if method=='gate_tele':
+            multi_qubit_nodes = [i for i in self.partition if len(i)>1]
+            for a,b in multi_qubit_nodes:
+                try: self.delete_edge(a,b)
+                except: pass
+            Gp_list = [self]
+            if F_list == None:
+                F_list = SimpleGraphLMQC.find_F_list()
+            for a,b in multi_qubit_nodes:
+                tmp_list = []
+                meas = ([a,b,'A0','A1'],['Z','Z','Z','Z'])
+                for Gp in Gp_list:
+                    if not set(Gp.neighbors(a)).union(Gp.neighbors(b)) - set([a,b]):
+                        #if a,b are disconnected from the other vertices in Gp
+                        Gp.flip_edge((a,b))
+                        tmp_list.append(Gp)
                     else:
-                        continue
-                    G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
-                    if not Gp.has_edge(a,b) and G_F.has_edge('A0','A1'):
-                        raise ValueError('One of the used lemmas is not satisfied')
-                    if Gp.has_edge(a,b) and not G_F.has_edge('A0','A1') and not F.has_edge('A0','A1'):
-                        raise ValueError('One of the used lemmas is not satisfied')
+                        for i,F in enumerate(F_list):
+                            #This comes from the assumption that HSZ=HSZsqrt(-iZ)
+                            if i in [0, 1, 2, 4, 5, 6, 8, 10, 12, 16]:
+                                pass
+                            else:
+                                continue
+                            G_F = SimpleGraphLMQC.do_GT(Gp,F,a,b)
+                            for corr_a,corr_b in [("I","I"),("S","I"),("I","S"),("S","S")]:
+                                G_oper = copy(G_F)
+                                if corr_a == "S":
+                                    G_oper.tau('A0',inplace=True)
+                                if corr_b == "S":
+                                    G_oper.tau('A1',inplace=True)
+                                G_oper.meas_seq(meas[0],meas[1],inplace=True)
+                                G_oper.relabel({"Aa":a,"Ab":b})
+                                tmp_list.append(G_oper)
+                Gp_list = tmp_list
+                tmp_list = []
+            eq = False
+            for G_op in Gp_list:
+                if G_op.is_LC_eq(H,allow_disc=True):
+                    eq = True
+                    break
+            return eq
+        elif method == 'brute' or method == 'conj':
+            self.calc_Q_local()
+            iden = matrix.identity(self.order())
+            #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
+            M = np.concatenate((
+                            np.kron(iden,other.adjacency_matrix()),
+                            np.kron(self.adjacency_matrix(),other.adjacency_matrix()),
+                            np.kron(iden,iden),
+                            np.kron(self.adjacency_matrix(),iden)
+                                ), axis=0)
+            #We can disregard part of this matrix as they correspond to neccessary zero elements of the solution vector.
+            M = Matrix(GF(2),M[self.nonzero_positions])
+            #and we solve for the vector (A,B,C,D).
+            V = M.kernel()
+            V_basis_array = np.asarray(V.basis())
+            #Now we check every vector in the linear solution space to see if it satisfies the symplectic constraint
+            self.iterable = range(len(V.basis()))
+            num_multi_qubit_nodes = len([i for i in self.partition if len(i)>1])
+            if method=='conj':
+                for combi in self.powerset(2+2*num_multi_qubit_nodes):
+                    bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
+                    if bool_result:
+                        # return bool_result,Q_result
+                        return True
+            else:
+                for combi in self.powerset():
+                    bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
+                    if bool_result:
+                        return True
+                        # return bool_result,Q_result
+            #If none of the vectors satisfy the symplectic constraint, return False
+            # return False,[]
+            return False
 
-                    if F.has_edge('A0','A1') and Gp.has_edge(a,b):
-                        #Case (I,I)
-                        G_oper = copy(G_F)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case II for (0,1) in F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 2 (S,I)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A0',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SI for (0,1) in F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 3 (I,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A1',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case IS for (0,1) in F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 4 (S,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau_seq(['A0','A1'],inplace=True)
-                        if debug:
-                            if G_oper.has_edge('A0','A1'):
-                                print "(A0,A1) are connected"
-                                print "Edges of F",F.edges()
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SS for (0,1) in F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                    elif F.has_edge('A0','A1') and not Gp.has_edge(a,b):
-                        #Case (I,I)
-                        G_oper = copy(G_F)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case II for (0,1) in F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 2 (S,I)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A0',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SI for (0,1) in F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 3 (I,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A1',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case IS for (0,1) in F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 4 (S,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau_seq(['A0','A1'],inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SS for (0,1) in F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-                    elif not F.has_edge('A0','A1') and Gp.has_edge(a,b):
-                        #Case (I,I)
-                        G_oper = copy(G_F)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case II for (0,1) notin F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 2 (S,I)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A0',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SI for (0,1) notin F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 3 (I,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A1',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case IS for (0,1) notin F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 4 (S,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A1',inplace=True)
-                        u = [i for i in G_oper.neighbors('A0') if i not in [a,b,'A0','A1']][0]
-                        G_oper.tau_seq(['A0',u,'A0'],inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SS for (0,1) notin F and (a,b) in Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-                    elif not F.has_edge('A0','A1') and not Gp.has_edge(a,b):
-                        #Case (I,I)
-                        G_oper = copy(G_F)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case II for (0,1) notin F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case (S,I)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A0',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SI for (0,1) notin F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case (I,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau('A1',inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case IS for (0,1) notin F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-
-                        #Case 4 (S,S)
-                        G_oper = copy(G_F)
-                        G_oper.tau_seq(['A0','A1'],inplace=True)
-                        G_oper.meas_seq(meas[0],meas[1],inplace=True)
-                        G_oper.relabel({"Aa":a,"Ab":b})
-                        tmp_list.append(G_oper)
-                        if debug:
-                            print "Case SS for (0,1) notin F and (a,b) notin Gp"
-                            if G_oper.is_LC_eq(H,allow_disc=True):
-                                print F.edges()
-            Gp_list = tmp_list
-            tmp_list = []
-
-        eq = False
-        for G_op in Gp_list:
-            if G_op.is_LC_eq(H,allow_disc=True):
-                if debug: show(G_op,H)
-                eq = True
-                break
-        # return result.val
-        return eq
+    @staticmethod
+    def random_connected_graph(V):
+        #Start with a random tree
+        G = SimpleGraphLMQC(graphs.RandomTree(V))
+        #Randomly choose a number of edges of the graph, we will add those later
+        max_number_edges = choice(range(V-1,V*(V-1)))
+        #Initialize the complement of G for later use.
+        Gc = G.complement()
+        #While G has less number of edges than the allowed maximum number of edges,
+        #add a random new edge from the edges not yet in G (so they are in Gc)
+        while G.size()<max_number_edges and Gc.size()>0:
+            i,j,_ = Gc.random_edge()
+            G.add_edge(i,j)
+            Gc.delete_edge(i,j)
+        return G
 
     def run_tests(self):
         assert type(self) in (SimpleGraphLMQC,SimpleGraph,Graph)
 
         G = SimpleGraphLMQC(Graph({0:[1,2,3]}),**{'partition':[[0,1],[2],[3]]})
         H = SimpleGraphLMQC(Graph({0:[1,3],2:[3]}))
-        dum, _ = G.is_LMQC_eq(H)
+        dum = G.is_LMQC_eq(H)
         if dum: print "Succesful tested with two LMQC equivalent graphs"
         else: print "Something went wrong"
 
         G = SimpleGraphLMQC(Graph({0:[1,2,3]}),**{'partition':[[0,1],[2],[3]]})
         H = SimpleGraphLMQC(Graph({0:[3],2:[1]}))
-        dum, _ = G.is_LMQC_eq(H)
+        dum = G.is_LMQC_eq(H)
         if not dum: print "Succesful tested with two not-LMQC equivalent graphs"
         else: print "Something went wrong"
