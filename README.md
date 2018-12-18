@@ -34,3 +34,19 @@ print G.is_LMQC_eq(Gp,method='brute')
 print G.is_LMQC_eq(Gp,method='conj')
 print G.is_LMQC_eq(Gp,method='gate_tele')
 ```
+#### Example (two random graph states)
+```
+G = SimpleGraphLMQC(graphs.RandomGNP(4,0.7))
+Gp = SimpleGraph(graphs.RandomGNP(4,0.9))
+G.set_partition([[0],[1],[2,3]])
+print G.is_LMQC_eq(Gp,method='brute')
+print G.is_LMQC_eq(Gp,method='conj')
+print G.is_LMQC_eq(Gp,method='gate_tele')
+```
+#### Example (one three-qubit node) (!THIS COULD TAKE LONG!)
+```
+G = SimpleGraphLMQC(Graph({0:[3],1:[4],2:[5]}))
+Gp = SimpleGraph(graphs.RandomGNP(6,0.9))
+G.set_partition([[0,1,2],[3],[4],[5]])
+G.is_LMQC_eq(Gp,method='brute')
+```
