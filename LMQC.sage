@@ -164,7 +164,7 @@ class SimpleGraphLMQC(SimpleGraph):
                 if bool_result:
                     # return bool_result,Q_result
                     return True
-        elif method == 'brute':
+        else:
             self.calc_Q_local()
             iden = matrix.identity(self.order())
             #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
@@ -189,7 +189,7 @@ class SimpleGraphLMQC(SimpleGraph):
                         # return bool_result,Q_result
             #If none of the vectors satisfy the symplectic constraint, return False
             # return False,[]
-            return False
+        return False
 
     def run_tests(self):
         assert type(self) in (SimpleGraphLMQC,SimpleGraph,Graph)
