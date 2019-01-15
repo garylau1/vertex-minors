@@ -137,7 +137,8 @@ class SimpleGraphLMQC(SimpleGraph):
                     break
             return eq
         elif method == 'conj':
-            assert self.is_connected() and other.is_connected(), "Self or other is not a locally connected graph"
+            assert self.is_connected(), "Self  is not a locally connected graph"
+            assert other.is_connected(), "Other is not a locally connected graph"
             for a,b in multi_qubit_nodes:
                 try: self.delete_edge(a,b)
                 except: pass
