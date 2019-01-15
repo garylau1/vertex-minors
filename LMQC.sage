@@ -163,28 +163,28 @@ class SimpleGraphLMQC(SimpleGraph):
                 if bool_result:
                     # return bool_result,Q_result
                     return True
-            elif method == 'brute':
-                self.calc_Q_local()
-                iden = matrix.identity(self.order())
-                #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
-                M = np.concatenate((
-                                np.kron(iden,other.adjacency_matrix()),
-                                np.kron(self.adjacency_matrix(),other.adjacency_matrix()),
-                                np.kron(iden,iden),
-                                np.kron(self.adjacency_matrix(),iden)
-                                    ), axis=0)
-                #We can disregard part of this matrix as they correspond to neccessary zero elements of the solution vector.
-                M = Matrix(GF(2),M[self.nonzero_positions])
-                #and we solve for the vector (A,B,C,D).
-                V = M.kernel()
-                V_basis_array = np.asarray(V.basis())
-                #Now we check every vector in the linear solution space to see if it satisfies the symplectic constraint
-                self.iterable = range(len(V.basis()))
-                num_multi_qubit_nodes = len([i for i in self.partition if len(i)>1])
-                for combi in self.powerset():
-                    bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
-                    if bool_result:
-                        return True
+        elif method == 'brute':
+            self.calc_Q_local()
+            iden = matrix.identity(self.order())
+            #Vectorization of the linear equation (1|adj')PQ(1|adj)^T = 0 with Q = (A,B,C,D)
+            M = np.concatenate((
+                            np.kron(iden,other.adjacency_matrix()),
+                            np.kron(self.adjacency_matrix(),other.adjacency_matrix()),
+                            np.kron(iden,iden),
+                            np.kron(self.adjacency_matrix(),iden)
+                                ), axis=0)
+            #We can disregard part of this matrix as they correspond to neccessary zero elements of the solution vector.
+            M = Matrix(GF(2),M[self.nonzero_positions])
+            #and we solve for the vector (A,B,C,D).
+            V = M.kernel()
+            V_basis_array = np.asarray(V.basis())
+            #Now we check every vector in the linear solution space to see if it satisfies the symplectic constraint
+            self.iterable = range(len(V.basis()))
+            num_multi_qubit_nodes = len([i for i in self.partition if len(i)>1])
+            for combi in self.powerset():
+                bool_result,Q_result = self.check_symp_constraint(V_basis_array[list(combi)])
+                if bool_result:
+                    return True
                         # return bool_result,Q_result
             #If none of the vectors satisfy the symplectic constraint, return False
             # return False,[]
